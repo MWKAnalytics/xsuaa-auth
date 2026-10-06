@@ -24,7 +24,7 @@
 
 import { StatelessDcrClientStore } from './dcr-client-store.js';
 import type { OAuthClientInformationFull } from './internal/sdk.js';
-import { ProxyOAuthServerProvider } from './internal/sdk.js';
+import { InvalidGrantError, ProxyOAuthServerProvider } from './internal/sdk.js';
 import type { Logger } from './logger.js';
 import { noopLogger } from './logger.js';
 import { OAuthStateCodec } from './oauth-state.js';
@@ -41,6 +41,19 @@ interface TokenResponse {
   expires_in?: number;
   refresh_token?: string;
   scope?: string;
+}
+
+/** The OAuth `error` code of a token-endpoint error body, or undefined when the body is not one. */
+function readOAuthErrorCode(body: string): string | undefined {
+  try {
+    const parsed: unknown = JSON.parse(body);
+    if (parsed && typeof parsed === 'object' && typeof (parsed as { error?: unknown }).error === 'string') {
+      return (parsed as { error: string }).error;
+    }
+  } catch {
+    // Not JSON (e.g. an HTML error page from a proxy) — no OAuth error code.
+  }
+  return undefined;
 }
 
 /**
@@ -263,6 +276,16 @@ export class XsuaaProxyOAuthProvider extends ProxyOAuthServerProvider {
     });
 
     if (!response.ok) {
+      const text = await response.text();
+      const oauthError = readOAuthErrorCode(text);
+      // XSUAA answers a revoked, expired or unknown refresh token with 401 invalid_token
+      // (RFC 6749 servers use 400 invalid_grant). Either way the grant is dead: answer
+      // invalid_grant so the client re-authenticates instead of retrying a 500.
+      if (oauthError === 'invalid_grant' || oauthError === 'invalid_token') {
+        this.logger.warn('XSUAA refresh token rejected', { status: response.status, body: text.slice(0, 200) });
+        throw new InvalidGrantError('Refresh token is invalid, expired or revoked');
+      }
+      this.logger.error('XSUAA refresh token exchange failed', { status: response.status, body: text.slice(0, 200) });
       throw new Error(`XSUAA refresh token exchange failed: ${response.status}`);
     }
 

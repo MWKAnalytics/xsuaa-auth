@@ -268,6 +268,54 @@ describe('XsuaaProxyOAuthProvider', () => {
     expect(token).toMatchObject({ access_token: 'fresh-access', refresh_token: 'fresh-refresh' });
   });
 
+  it.each([
+    [
+      401,
+      '{"error":"invalid_token","error_description":"The token expired, was revoked, or the token ID is incorrect."}',
+    ],
+    [400, '{"error":"invalid_grant","error_description":"Invalid refresh token"}'],
+  ])('maps an XSUAA %i %s refresh rejection to invalid_grant and warns', async (status, body) => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(mockFetchResponse({ ok: false, status, text: body })));
+    const logger = makeCapturingLogger();
+    const provider = new XsuaaProxyOAuthProvider(
+      STUB_XSUAA_CREDS,
+      vi.fn() as never,
+      { getClient: vi.fn() } as never,
+      'https://arc1.example.com/oauth/callback',
+      { encode: vi.fn() } as unknown as OAuthStateCodec,
+      logger,
+    ) as unknown as AnyProvider;
+
+    await expect(provider.exchangeRefreshToken({ client_id: 'local-client-id' }, 'revoked')).rejects.toMatchObject({
+      errorCode: 'invalid_grant',
+    });
+    expect(logger.warns.find((w) => /XSUAA refresh token rejected/.test(w.message))?.data).toMatchObject({ status });
+  });
+
+  it.each([
+    [401, '{"error":"invalid_client","error_description":"Bad credentials"}'],
+    [503, '<html>Service Unavailable</html>'],
+  ])('keeps an XSUAA %i %s refresh failure a server error and logs it', async (status, body) => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(mockFetchResponse({ ok: false, status, text: body })));
+    const logger = makeCapturingLogger();
+    const provider = new XsuaaProxyOAuthProvider(
+      STUB_XSUAA_CREDS,
+      vi.fn() as never,
+      { getClient: vi.fn() } as never,
+      'https://arc1.example.com/oauth/callback',
+      { encode: vi.fn() } as unknown as OAuthStateCodec,
+      logger,
+    ) as unknown as AnyProvider;
+
+    const error = await provider.exchangeRefreshToken({ client_id: 'local-client-id' }, 'refresh').catch((e) => e);
+    expect(error).toBeInstanceOf(Error);
+    expect(error).not.toHaveProperty('errorCode');
+    expect(error.message).toBe(`XSUAA refresh token exchange failed: ${status}`);
+    expect(logger.errors.find((e) => /XSUAA refresh token exchange failed/.test(e.message))?.data).toMatchObject({
+      status,
+    });
+  });
+
   it('warns but does not throw when revocation returns a non-2xx response', async () => {
     const fetchMock = vi.fn().mockResolvedValue(mockFetchResponse({ ok: false, status: 400, text: 'bad token' }));
     vi.stubGlobal('fetch', fetchMock);
