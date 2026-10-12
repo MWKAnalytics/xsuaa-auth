@@ -10,7 +10,7 @@
 /**
  * Built-in redirect_uris for the pre-registered XSUAA client. These cover the
  * common MCP clients out of the box; additional URIs can be added at
- * `/authorize` time via `ensureRedirectUri()`. Since the `/oauth/callback`
+ * `/authorize` time via `ensureRedirectUri()`. With the `/oauth/callback`
  * proxy (see {@link XSUAA_DEFAULT_REDIRECT_URI_PATTERNS}) XSUAA never sees these
  * client URIs — this package validates them. They do not have to be registered
  * in `xs-security.json`, and the custom-scheme entries cannot be.
@@ -134,10 +134,8 @@ export function matchesRedirectPattern(
  * non-loopback host, and — fail-closed — ANY other unknown/custom scheme that is
  * neither a known-good scheme nor matched by `patterns`.
  *
- * Fail-closed (SPEC §6, normative): throws on malformed/disallowed input. Earlier
- * this function returned (allowed) for any scheme that merely parsed, so an
- * unregistered `myapp://` redirect slipped through; `patterns` is now wired into
- * the decision so the documented fail-closed behavior is real.
+ * Rejected inputs throw (SPEC §6). Unknown schemes require an explicit matching
+ * pattern; there is no permissive fallback.
  */
 export function validateRedirectUri(
   uri: string,
