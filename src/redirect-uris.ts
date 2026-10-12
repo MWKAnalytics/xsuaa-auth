@@ -31,10 +31,12 @@ export const XSUAA_DEFAULT_REDIRECT_URIS = [
  * and the callback; accepting arbitrary URIs would expose authorization codes.
  *
  * Configure the two boundaries separately:
- * - xs-security.json allows this server's /oauth/callback and /oauth/logged-out.
- * - redirectUriPatterns allows the client callbacks the deployment needs.
+ * - xs-security.json allows this server's /oauth/callback.
+ * - redirectUriPatterns allows the default client's callbacks.
  *   XSUAA rejects custom schemes such as cursor:// and vscode:// (#812 in ARC-1),
  *   so those client URIs belong only here. Keep patterns narrow.
+ * DCR separately uses validateRedirectUri() at registration and exact URI
+ * matching at the callback; these patterns only add extra DCR custom schemes.
  *
  * Glob semantics: `*` stays within a host/path segment; `**` can cross segments.
  */
@@ -50,7 +52,7 @@ export const XSUAA_DEFAULT_REDIRECT_URI_PATTERNS = [
   'https://global.consent.azure-apim.net/redirect/**',
 ] as const;
 
-/** Translate one xs-security.json redirect-uri glob into an anchored,
+/** Translate one redirect-URI glob into an anchored,
  *  case-insensitive RegExp. `**` → `.*` (crosses `/`); `*` → `[^/]*` (within a
  *  segment); every other character is matched literally. The trailing `/` and
  *  anchoring mean a host-label `*` (e.g. `*.hana.ondemand.com`) cannot be widened

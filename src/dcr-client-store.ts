@@ -127,15 +127,15 @@ export interface StatelessDcrClientStoreOptions {
 
   /**
    * Redirect-URI allowlist for the pre-registered default client. Default
-   * {@link XSUAA_DEFAULT_REDIRECT_URI_PATTERNS}. This list — not
-   * `xs-security.json` — validates a client's redirect_uri; see
-   * `redirect-uris.ts` for how the two relate.
+   * {@link XSUAA_DEFAULT_REDIRECT_URI_PATTERNS}. Also permits extra DCR custom
+   * schemes; it does not restrict DCR HTTPS domains or known native schemes.
    */
   redirectUriPatterns?: readonly string[];
 
   /**
    * Built-in redirect_uris baked into the pre-registered default client.
-   * Default {@link XSUAA_DEFAULT_REDIRECT_URIS}.
+   * Default {@link XSUAA_DEFAULT_REDIRECT_URIS}. Each URI must also match
+   * redirectUriPatterns at the callback.
    */
   defaultRedirectUris?: readonly string[];
 

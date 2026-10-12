@@ -63,9 +63,9 @@ if (process.env.VCAP_SERVICES) {
     appUrl: resolveAppUrl(process.env, { publicUrlEnvVar: 'PUBLIC_URL', port: 3000 }),
     clientIdPrefix: 'example-',
     resourceName: 'Example MCP Server',
-    // `redirectUriPatterns` is the allowlist for your clients' redirect URIs (XSUAA only
-    // sees this server's own callback). The shipped defaults cover Claude, Cursor,
-    // VS Code and MCP Inspector; narrow them to the clients you actually serve.
+    // Narrow `redirectUriPatterns` and `defaultRedirectUris` together for the
+    // pre-registered client. DCR uses its own scheme policy and exact URI matching;
+    // these patterns do not restrict DCR HTTPS domains (README: Redirect validation).
   };
 }
 
