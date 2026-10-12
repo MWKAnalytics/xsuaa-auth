@@ -227,7 +227,9 @@ describe('XsuaaProxyOAuthProvider', () => {
   });
 
   it('throws a concise error when XSUAA authorization-code exchange fails', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(mockFetchResponse({ ok: false, status: 502, text: 'bad gateway' }));
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(mockFetchResponse({ ok: false, status: 502, text: 'upstream echoed synthetic-auth-code' }));
     vi.stubGlobal('fetch', fetchMock);
     const logger = makeCapturingLogger();
     const provider = new XsuaaProxyOAuthProvider(
@@ -242,7 +244,7 @@ describe('XsuaaProxyOAuthProvider', () => {
     await expect(provider.exchangeAuthorizationCode({ client_id: 'local-client-id' }, 'auth-code')).rejects.toThrow(
       'XSUAA token exchange failed: 502',
     );
-    expect(logger.errors.find((e) => /XSUAA token exchange failed/.test(e.message))?.data).toMatchObject({
+    expect(logger.errors.find((e) => /XSUAA token exchange failed/.test(e.message))?.data).toEqual({
       status: 502,
     });
   });
@@ -269,10 +271,7 @@ describe('XsuaaProxyOAuthProvider', () => {
   });
 
   it.each([
-    [
-      401,
-      '{"error":"invalid_token","error_description":"The token expired, was revoked, or the token ID is incorrect."}',
-    ],
+    [401, '{"error":"invalid_token","error_description":"upstream echoed synthetic-refresh-token"}'],
     [400, '{"error":"invalid_grant","error_description":"Invalid refresh token"}'],
   ])('maps an XSUAA %i %s refresh rejection to invalid_grant and warns', async (status, body) => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(mockFetchResponse({ ok: false, status, text: body })));
@@ -289,12 +288,18 @@ describe('XsuaaProxyOAuthProvider', () => {
     await expect(provider.exchangeRefreshToken({ client_id: 'local-client-id' }, 'revoked')).rejects.toMatchObject({
       errorCode: 'invalid_grant',
     });
-    expect(logger.warns.find((w) => /XSUAA refresh token rejected/.test(w.message))?.data).toMatchObject({ status });
+    expect(logger.warns.find((w) => /XSUAA refresh token rejected/.test(w.message))?.data).toEqual({ status });
   });
 
   it.each([
     [401, '{"error":"invalid_client","error_description":"Bad credentials"}'],
     [503, '<html>Service Unavailable</html>'],
+    [503, '{"error":"invalid_token","refresh_token":"synthetic-refresh-token"}'],
+    [500, '{"error":"invalid_grant"}'],
+    [400, '{"error":"unknown_error","client_secret":"synthetic-client-secret"}'],
+    [401, '{"error":42}'],
+    [400, 'null'],
+    [401, 'not JSON'],
   ])('keeps an XSUAA %i %s refresh failure a server error and logs it', async (status, body) => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(mockFetchResponse({ ok: false, status, text: body })));
     const logger = makeCapturingLogger();
@@ -311,7 +316,7 @@ describe('XsuaaProxyOAuthProvider', () => {
     expect(error).toBeInstanceOf(Error);
     expect(error).not.toHaveProperty('errorCode');
     expect(error.message).toBe(`XSUAA refresh token exchange failed: ${status}`);
-    expect(logger.errors.find((e) => /XSUAA refresh token exchange failed/.test(e.message))?.data).toMatchObject({
+    expect(logger.errors.find((e) => /XSUAA refresh token exchange failed/.test(e.message))?.data).toEqual({
       status,
     });
   });

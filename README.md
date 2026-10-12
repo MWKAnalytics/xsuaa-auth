@@ -291,6 +291,10 @@ By design, the package's job ends at producing `AuthInfo` + the raw bearer token
 
 ### A note on the logger
 
+Expired or revoked refresh grants return `400 invalid_grant` so clients can sign in
+again. Other upstream refresh failures remain `500 server_error`. Token-exchange
+failure events log the HTTP status, never the upstream body, which may echo secrets.
+
 The injected `Logger` uses `(message, data?)` argument order:
 
 ```ts

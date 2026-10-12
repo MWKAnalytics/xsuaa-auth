@@ -227,8 +227,8 @@ export class XsuaaProxyOAuthProvider extends ProxyOAuthServerProvider {
     });
 
     if (!response.ok) {
-      const text = await response.text();
-      this.logger.error('XSUAA token exchange failed', { status: response.status, body: text.slice(0, 200) });
+      await response.body?.cancel();
+      this.logger.error('XSUAA token exchange failed', { status: response.status });
       throw new Error(`XSUAA token exchange failed: ${response.status}`);
     }
 
@@ -281,11 +281,14 @@ export class XsuaaProxyOAuthProvider extends ProxyOAuthServerProvider {
       // XSUAA answers a revoked, expired or unknown refresh token with 401 invalid_token
       // (RFC 6749 servers use 400 invalid_grant). Either way the grant is dead: answer
       // invalid_grant so the client re-authenticates instead of retrying a 500.
-      if (oauthError === 'invalid_grant' || oauthError === 'invalid_token') {
-        this.logger.warn('XSUAA refresh token rejected', { status: response.status, body: text.slice(0, 200) });
+      if (
+        (response.status === 400 || response.status === 401) &&
+        (oauthError === 'invalid_grant' || oauthError === 'invalid_token')
+      ) {
+        this.logger.warn('XSUAA refresh token rejected', { status: response.status });
         throw new InvalidGrantError('Refresh token is invalid, expired or revoked');
       }
-      this.logger.error('XSUAA refresh token exchange failed', { status: response.status, body: text.slice(0, 200) });
+      this.logger.error('XSUAA refresh token exchange failed', { status: response.status });
       throw new Error(`XSUAA refresh token exchange failed: ${response.status}`);
     }
 

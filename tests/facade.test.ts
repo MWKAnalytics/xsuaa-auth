@@ -183,12 +183,15 @@ describe('setupHttpAuth — xsuaa mode', () => {
       expect(logger.has('warn', /XSUAA refresh token rejected/)).toBe(true);
     });
 
-    it('still answers 500 server_error when XSUAA itself fails, and logs it', async () => {
-      const { res, logger } = await refreshWithXsuaaAnswer(503, '<html>Service Unavailable</html>');
-      expect(res.status).toBe(500);
-      expect(res.body.error).toBe('server_error');
-      expect(logger.has('error', /XSUAA refresh token exchange failed/)).toBe(true);
-    });
+    it.each(['<html>Service Unavailable</html>', '{"error":"invalid_token"}'])(
+      'still answers 500 server_error for an upstream 503: %s',
+      async (body) => {
+        const { res, logger } = await refreshWithXsuaaAnswer(503, body);
+        expect(res.status).toBe(500);
+        expect(res.body.error).toBe('server_error');
+        expect(logger.has('error', /XSUAA refresh token exchange failed/)).toBe(true);
+      },
+    );
   });
 });
 
