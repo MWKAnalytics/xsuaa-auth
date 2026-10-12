@@ -24,39 +24,19 @@ export const XSUAA_DEFAULT_REDIRECT_URIS = [
 ] as const;
 
 /**
- * Redirect-URI allowlist for the pre-registered XSUAA default client.
+ * Client redirect-URI allowlist for the pre-registered XSUAA client.
  *
- * ── Why this layer is the authoritative validator ──
- * The issue-#214 callback proxy (see `oauth-state.ts`) sends XSUAA the proxy's OWN
- * `/oauth/callback` as the redirect_uri — at `/authorize` and again at the token
- * exchange — and carries the client's real redirect_uri inside the signed state.
- * XSUAA therefore never validates the client's redirect_uri; this list does.
- * Without it, `ensureRedirectUri` would auto-trust ANY redirect_uri supplied at
- * `/authorize` for the shared default client, letting an attacker steer a victim's
- * authorization code to their own URI (security audit 2026-06, follow-up to PR #352).
+ * The callback proxy sends its own /oauth/callback URI to XSUAA and carries
+ * the client's URI in signed state. This allowlist gates ensureRedirectUri()
+ * and the callback; accepting arbitrary URIs would expose authorization codes.
  *
- * ── Relationship to `xs-security.json` ──
- * This list is NOT a mirror of `oauth2-configuration.redirect-uris`, and cannot be:
- * XSUAA rejects custom schemes such as `cursor://` and `vscode://` on
- * `cf create-service` / `cf update-service` ("Malformed redirect URIs detected",
- * arc-mcp/arc-1#812). The responsibilities are split:
- *   - `xs-security.json` must allow what XSUAA itself receives: this server's own
- *     `/oauth/callback` and `/oauth/logged-out` URLs (on Cloud Foundry typically
- *     covered by `https://*.hana.ondemand.com/**`, or the app's custom domain).
- *   - `redirectUriPatterns` (this list, or a consumer override) must allow the
- *     client redirect URIs the deployment wants to accept, custom schemes included.
- * Keep the pattern list as narrow as the deployment needs; a too-broad pattern
- * weakens both the `/authorize` shim and the `/oauth/callback` check.
+ * Configure the two boundaries separately:
+ * - xs-security.json allows this server's /oauth/callback and /oauth/logged-out.
+ * - redirectUriPatterns allows the client callbacks the deployment needs.
+ *   XSUAA rejects custom schemes such as cursor:// and vscode:// (#812 in ARC-1),
+ *   so those client URIs belong only here. Keep patterns narrow.
  *
- * ── Why vendored, not read from xs-security.json ──
- * `xs-security.json` is consumed by XSUAA at service-creation time and is NOT
- * shipped with the running app (excluded by `.cfignore`, the npm `files`
- * allowlist, and the Dockerfile), and the service binding does not expose the
- * patterns — so the app could not read them at runtime even if they were the
- * right source.
- *
- * Glob semantics (same as xs-security.json): `*` matches within a single host/path
- * segment (never `/`), `**` matches across segments.
+ * Glob semantics: `*` stays within a host/path segment; `**` can cross segments.
  */
 export const XSUAA_DEFAULT_REDIRECT_URI_PATTERNS = [
   'http://localhost:*/**',
