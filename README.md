@@ -78,6 +78,9 @@ What the facade does in XSUAA mode: applies CORS (if `allowedOrigins` set) → b
 
 It deliberately sets **no restrictive `Cross-Origin-Opener-Policy`** — popup-based OAuth (Copilot Studio, claude.ai) breaks under `COOP: same-origin`. Broader hardening (helmet CSP/HSTS) stays yours to add.
 
+Expired or revoked refresh grants return `400 invalid_grant` so clients can sign in
+again. Other upstream refresh failures remain `500 server_error`.
+
 ### Layer 2 — building blocks (full control)
 
 When you orchestrate the HTTP server yourself (arc-1, LISA), call the same primitives the facade uses:
@@ -291,9 +294,8 @@ By design, the package's job ends at producing `AuthInfo` + the raw bearer token
 
 ### A note on the logger
 
-Expired or revoked refresh grants return `400 invalid_grant` so clients can sign in
-again. Other upstream refresh failures remain `500 server_error`. Token-exchange
-failure events log the HTTP status, never the upstream body, which may echo secrets.
+Token-exchange failure events log the HTTP status, never the upstream body, which
+may echo secrets.
 
 The injected `Logger` uses `(message, data?)` argument order:
 
