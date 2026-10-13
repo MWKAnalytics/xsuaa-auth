@@ -126,16 +126,16 @@ export interface StatelessDcrClientStoreOptions {
   ttlSeconds?: number;
 
   /**
-   * Redirect-URI allowlist (xs-security.json glob mirror) for the
-   * pre-registered default client. Default
-   * {@link XSUAA_DEFAULT_REDIRECT_URI_PATTERNS}. MUST stay in sync with the
-   * XSUAA service's `oauth2-configuration.redirect-uris`.
+   * Redirect-URI allowlist for the pre-registered default client. Default
+   * {@link XSUAA_DEFAULT_REDIRECT_URI_PATTERNS}. Also permits extra DCR custom
+   * schemes; it does not restrict DCR HTTPS domains or known native schemes.
    */
   redirectUriPatterns?: readonly string[];
 
   /**
    * Built-in redirect_uris baked into the pre-registered default client.
-   * Default {@link XSUAA_DEFAULT_REDIRECT_URIS}.
+   * Default {@link XSUAA_DEFAULT_REDIRECT_URIS}. Each URI must also match
+   * redirectUriPatterns at the callback.
    */
   defaultRedirectUris?: readonly string[];
 
@@ -294,7 +294,7 @@ export class StatelessDcrClientStore implements OAuthRegisteredClientsStore {
    * SDK's exact-match check passes. The mutation is replayed on every
    * `/authorize`, so it doesn't need to persist. SECURITY: we register a
    * candidate URI ONLY if it matches `redirectUriPatterns` (the vendored
-   * mirror of xs-security.json). The issue-#214 callback proxy removed XSUAA
+   * allowlist in `redirect-uris.ts`). The issue-#214 callback proxy removed XSUAA
    * from the client-redirect path, so an un-gated add here would let an attacker
    * register an arbitrary redirect_uri and have the SDK accept it — the entry
    * point for authorization-code interception (security audit 2026-06). A

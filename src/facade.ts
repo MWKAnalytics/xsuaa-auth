@@ -47,15 +47,17 @@ export interface AuthOptions {
     resourceName?: string;
     scopesSupported?: string[];
     requiredScopes?: string[];
+    /** Default-client redirect allowlist; also permits extra DCR custom schemes. */
     redirectUriPatterns?: readonly string[];
+    /** Initial default-client URIs; each must also match redirectUriPatterns at the callback. */
     defaultRedirectUris?: readonly string[];
     dcrTtlSeconds?: number;
     stateTtlSeconds?: number;
     dcrSigningSecret?: string;
     /**
      * This server's own OAuth callback URL sent to XSUAA as the redirect_uri
-     * (issue #214 callback proxy). Must match a `redirectUriPatterns` entry. When
-     * omitted, defaults to `${appUrl}/oauth/callback`.
+     * (issue #214 callback proxy). Allow it in XSUAA's xs-security.json redirect-uris.
+     * When omitted, defaults to `${appUrl}/oauth/callback`.
      */
     callbackUrl?: string;
   };
@@ -175,9 +177,10 @@ export function setupHttpAuth(
     // /authorize redirect_uri shim: auto-register a candidate redirect_uri for the
     // pre-registered XSUAA client (Manual-OAuth clients like Copilot Studio). The
     // SDK requires exact redirect_uri matching; `ensureRedirectUri` is pattern-gated
-    // (xs-security.json mirror) so only allowlisted URIs are added, then XSUAA stays
-    // the authoritative validator. Also merges query params into the body for clients
-    // that POST /authorize with params in the query string.
+    // (`redirectUriPatterns`) so only allowlisted URIs are added. XSUAA validates
+    // the server callback; this package validates the client redirect. Also merges
+    // query params into the body for clients that POST /authorize with params in
+    // the query string.
     app.use('/authorize', (req, _res, next) => {
       if (
         req.method === 'POST' &&

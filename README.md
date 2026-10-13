@@ -186,18 +186,30 @@ The facade's configuration object. All fields are optional except where noted.
 | `xsuaa.resourceName` | `string` | SDK default | `resource_name` in the protected-resource metadata. |
 | `xsuaa.scopesSupported` | `string[]` | — | Advertised in OAuth metadata. **Also threaded to the XSUAA + OIDC verifiers as `acceptedScopes`** — set it to your own scope names (e.g. `['Viewer']`) so non-arc-1 scopes aren't filtered out of verified tokens. |
 | `xsuaa.requiredScopes` | `string[]` | — | Enforced via the SDK's `requireBearerAuth({ requiredScopes })`. |
-| `xsuaa.redirectUriPatterns` | `readonly string[]` | `XSUAA_DEFAULT_REDIRECT_URI_PATTERNS` | Allowlist for the `/authorize` shim. **Must mirror** your `xs-security.json` `oauth2-configuration.redirect-uris`. |
-| `xsuaa.defaultRedirectUris` | `readonly string[]` | `XSUAA_DEFAULT_REDIRECT_URIS` | Pre-registered URIs (Claude, Cursor, VS Code, MCP Inspector ship by default). |
+| `xsuaa.redirectUriPatterns` | `readonly string[]` | `XSUAA_DEFAULT_REDIRECT_URI_PATTERNS` | Redirect allowlist for the pre-registered default client; also permits extra DCR custom schemes. See [Redirect validation](#redirect-validation). |
+| `xsuaa.defaultRedirectUris` | `readonly string[]` | `XSUAA_DEFAULT_REDIRECT_URIS` | Initial URIs for the default client; each must also match `redirectUriPatterns` at the callback. Narrow both lists together. |
 | `xsuaa.dcrTtlSeconds` | `number` | `2592000` (30d) | DCR `client_id` lifetime. `0` disables expiry (recommended for clients that don't auto-re-register on `invalid_client`). |
 | `xsuaa.stateTtlSeconds` | `number` | `600` | OAuth-state token lifetime. `0` disables expiry. |
 | `xsuaa.dcrSigningSecret` | `string` | XSUAA `clientsecret` | Dedicated HMAC secret for DCR `client_id`s — set a ≥32-byte value so a `clientsecret` rotation doesn't invalidate cached client_ids. |
-| `xsuaa.callbackUrl` | `string` | `${appUrl}/oauth/callback` | This server's own OAuth callback URL sent to XSUAA as the redirect_uri (issue #214 callback proxy). Must match a `redirectUriPatterns` entry. |
+| `xsuaa.callbackUrl` | `string` | `${appUrl}/oauth/callback` | This server's callback URL sent to XSUAA. Allow it in `xs-security.json` `redirect-uris`; it need not match the client patterns. |
 | `oidc` | `object` | — | `{ issuer, audience, clockToleranceSec?, algorithms?, scopeClaim?, acceptedScopes?, fallbackScopes? }`. Lazy-imports `jose`. `algorithms` defaults to `['RS256','ES256','PS256']`; `scopeClaim` overrides the primary scope-claim name (default `scope`); `acceptedScopes` is the scope-name allowlist for **OIDC-only** deployments with custom scope names (defaults to `xsuaa.scopesSupported`, else the arc-1 set); `fallbackScopes` (default `[]`, fail closed) is the scope set granted when a verified token carries no accepted scope — set `['read']` for legacy read-only fallback. |
 | `allowedOrigins` | `string[]` | — | Exact-match CORS allowlist (with `credentials`) for browser MCP clients. Unset = no CORS. |
 | `required` | `boolean` | `false` | `true` ⇒ throw if no method configured; `false` ⇒ warn + return `undefined` (open). |
 | `expandScopes` | `(scopes: string[]) => string[]` | identity | Injected scope-expansion policy, applied by every verifier. |
 
 `setupHttpAuth(app, options, logger?)` returns the `/mcp` bearer `RequestHandler`, or `undefined` when no method is configured and `required` is falsy.
+
+### Redirect validation
+
+XSUAA validates the server's callback URL; this package validates client redirects.
+For the pre-registered default client, `redirectUriPatterns` gates added URIs and
+the callback. Keep patterns narrow and align `defaultRedirectUris` with them.
+
+DCR registration separately accepts HTTPS, loopback HTTP and the known schemes
+`claude:`, `cursor:`, `vscode:` and `vscode-insiders:`; patterns can permit extra
+custom schemes. DCR callbacks must exactly match a URI in the signed registration.
+Narrowing the patterns does **not** restrict DCR HTTPS domains or known schemes.
+Client custom schemes belong in this package's configuration, not `xs-security.json`.
 
 ---
 

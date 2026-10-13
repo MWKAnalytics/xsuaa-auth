@@ -63,8 +63,9 @@ if (process.env.VCAP_SERVICES) {
     appUrl: resolveAppUrl(process.env, { publicUrlEnvVar: 'PUBLIC_URL', port: 3000 }),
     clientIdPrefix: 'example-',
     resourceName: 'Example MCP Server',
-    // Keep these in sync with your xs-security.json oauth2-configuration.redirect-uris.
-    // The shipped defaults already cover Claude, Cursor, VS Code, MCP Inspector.
+    // Narrow `redirectUriPatterns` and `defaultRedirectUris` together for the
+    // pre-registered client. DCR uses its own scheme policy and exact URI matching;
+    // these patterns do not restrict DCR HTTPS domains (README: Redirect validation).
   };
 }
 
