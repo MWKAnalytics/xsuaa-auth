@@ -146,6 +146,53 @@ describe('setupHttpAuth — xsuaa mode', () => {
     const { logger } = buildXsuaaApp();
     expect(logger.has('info', /XSUAA OAuth proxy enabled/)).toBe(true);
   });
+
+  describe('POST /token with a refresh token XSUAA rejects', () => {
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    async function refreshWithXsuaaAnswer(status: number, body: string) {
+      const { app, logger } = buildXsuaaApp();
+      const reg = await request(app)
+        .post('/register')
+        .send({
+          client_name: 'test',
+          redirect_uris: ['http://localhost:53682/callback'],
+          token_endpoint_auth_method: 'none',
+        });
+      expect(reg.status).toBe(201);
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue({ ok: false, status, text: vi.fn().mockResolvedValue(body) } as unknown as Response),
+      );
+      const res = await request(app)
+        .post('/token')
+        .type('form')
+        .send({ grant_type: 'refresh_token', refresh_token: 'revoked-refresh', client_id: reg.body.client_id });
+      return { res, logger };
+    }
+
+    it('answers 400 invalid_grant when XSUAA reports a revoked refresh token (401 invalid_token)', async () => {
+      const { res, logger } = await refreshWithXsuaaAnswer(
+        401,
+        '{"error":"invalid_token","error_description":"The token expired, was revoked, or the token ID is incorrect."}',
+      );
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe('invalid_grant');
+      expect(logger.has('warn', /XSUAA refresh token rejected/)).toBe(true);
+    });
+
+    it.each(['<html>Service Unavailable</html>', '{"error":"invalid_token"}'])(
+      'still answers 500 server_error for an upstream 503: %s',
+      async (body) => {
+        const { res, logger } = await refreshWithXsuaaAnswer(503, body);
+        expect(res.status).toBe(500);
+        expect(res.body.error).toBe('server_error');
+        expect(logger.has('error', /XSUAA refresh token exchange failed/)).toBe(true);
+      },
+    );
+  });
 });
 
 describe('setupHttpAuth — CORS + COOP', () => {
