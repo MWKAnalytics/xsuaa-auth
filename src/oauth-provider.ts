@@ -342,15 +342,15 @@ export interface CreateXsuaaOAuthProviderOptions {
    * `credentials.clientsecret` (legacy behavior).
    */
   dcrSigningSecret?: string;
-  /** Redirect-URI allowlist (xs-security.json mirror) for the default client. */
+  /** Default-client redirect allowlist; also permits extra DCR custom schemes (see `redirect-uris.ts`). */
   redirectUriPatterns?: readonly string[];
-  /** Built-in redirect_uris baked into the pre-registered default client. */
+  /** Initial default-client URIs; each must also match redirectUriPatterns at the callback. */
   defaultRedirectUris?: readonly string[];
   /**
    * This server's own OAuth callback URL (e.g. `https://app.../oauth/callback`),
    * sent to XSUAA as the redirect_uri so the server sits in the return path and
    * can fix XSUAA's `+`-in-state encoding bug (issue #214). Must be absolute and
-   * match a `redirectUriPatterns` entry. When omitted, falls back to
+   * allowed in XSUAA's xs-security.json redirect-uris. When omitted, falls back to
    * `${appUrl}/oauth/callback`.
    */
   callbackUrl?: string;
