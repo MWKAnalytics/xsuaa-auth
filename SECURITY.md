@@ -4,14 +4,13 @@
 
 ## Supported Versions
 
-Pre-1.0 (current state): only the latest published `0.x` minor line receives security fixes. The API is still settling across the consuming MCP servers, so please track the latest release.
+The latest published `1.x` release receives security fixes. Upgrade older releases to the latest fixed version; consult the advisory for the affected and patched versions of each issue.
 
 | Version | Supported            |
 | ------- | -------------------- |
-| 0.1.x   | :white_check_mark:   |
-| < 0.1   | :x: — please upgrade |
+| Latest 1.x | :white_check_mark: |
+| Older releases | :x: — please upgrade |
 
-After 1.0, this table will reflect the documented support window for each major.
 
 ## Reporting a Vulnerability
 
@@ -50,7 +49,7 @@ Confirmed vulnerabilities receive a [GitHub Security Advisory (GHSA)](https://gi
 
 ## Temporary dependency risk acceptance
 
-Until **21 October 2026, 00:00 Europe/Berlin**, CI and publishing accept only
+Until **28 October 2026, 00:00 Europe/Berlin**, CI and publishing accept only
 [GHSA-86w9-cpqp-85rv](https://github.com/advisories/GHSA-86w9-cpqp-85rv), through
 `@sap-cloud-sdk/connectivity@4.9.1 → jks-js@1.1.7 → node-forge@1.4.0`.
 No patched Forge release is available. Review of this package's destination lookup and the
@@ -78,6 +77,8 @@ We commit to:
 The package ships fail-closed defaults, but a few knobs are load-bearing for security and are documented in the [README](./README.md) and [`docs/SPEC.md`](./docs/SPEC.md):
 
 - **`redirectUriPatterns`** gates additions and callbacks for the pre-registered default client. Keep it narrow and ensure every `defaultRedirectUris` entry matches it; otherwise sign-in fails at the callback. XSUAA's `xs-security.json` allows the server callback, not client custom schemes.
+- **Browser approval is mandatory:** every authorization request, including manual and previously registered clients, requires explicit approval before XSUAA. The callback must return with the separate browser-binding cookie, and local codes are bound to the client and return address. Existing sign-ins in flight must restart after upgrading. Existing upstream refresh tokens require separate revocation if compromised.
+- **`dcrEnabled: false`** removes new registrations and registration metadata; it does not revoke existing client IDs or upstream tokens. Registration audit events include parsed redirect hosts.
 - **DCR uses a separate redirect policy:** HTTPS, loopback HTTP and known native schemes are accepted independently of these patterns; extra custom schemes can be pattern-allowed. The callback checks the exact URI in the signed registration. Narrowing patterns does not restrict DCR HTTPS domains or known schemes. See [Redirect validation](./README.md#redirect-validation).
 - **`dcrSigningSecret`** stabilizes DCR `client_id`s across restarts and should be a dedicated ≥32-byte secret. Rotating it (or bumping `dcrKdfLabel` / `stateKdfLabel`) is the revocation knob for issued client_ids and OAuth-state tokens.
 - **`createOidcVerifier({ algorithms })`** defaults to `['RS256','ES256','PS256']` — an explicit allowlist that closes `alg:none` and algorithm-confusion. Do not widen it to include symmetric algorithms.

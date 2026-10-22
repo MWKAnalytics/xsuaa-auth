@@ -188,10 +188,11 @@ The facade's configuration object. All fields are optional except where noted.
 | `xsuaa.requiredScopes` | `string[]` | — | Enforced via the SDK's `requireBearerAuth({ requiredScopes })`. |
 | `xsuaa.redirectUriPatterns` | `readonly string[]` | `XSUAA_DEFAULT_REDIRECT_URI_PATTERNS` | Redirect allowlist for the pre-registered default client; also permits extra DCR custom schemes. See [Redirect validation](#redirect-validation). |
 | `xsuaa.defaultRedirectUris` | `readonly string[]` | `XSUAA_DEFAULT_REDIRECT_URIS` | Initial URIs for the default client; each must also match `redirectUriPatterns` at the callback. Narrow both lists together. |
+| `xsuaa.dcrEnabled` | `boolean` | `true` | Set `false` to remove `/register` and its discovery metadata. Existing registrations and manual clients remain usable, with browser approval. |
 | `xsuaa.dcrTtlSeconds` | `number` | `2592000` (30d) | DCR `client_id` lifetime. `0` disables expiry (recommended for clients that don't auto-re-register on `invalid_client`). |
-| `xsuaa.stateTtlSeconds` | `number` | `600` | OAuth-state token lifetime. `0` disables expiry. |
+| `xsuaa.stateTtlSeconds` | `number` | `600` | Legacy codec state lifetime. Browser-approved flows always expire within ten minutes, even when set to `0`. |
 | `xsuaa.dcrSigningSecret` | `string` | XSUAA `clientsecret` | Dedicated HMAC secret for DCR `client_id`s — set a ≥32-byte value so a `clientsecret` rotation doesn't invalidate cached client_ids. |
-| `xsuaa.callbackUrl` | `string` | `${appUrl}/oauth/callback` | This server's callback URL sent to XSUAA. Allow it in `xs-security.json` `redirect-uris`; it need not match the client patterns. |
+| `xsuaa.callbackUrl` | `string` | `${appUrl}/oauth/callback` | This server's callback URL sent to XSUAA. Must share the configured `appUrl` origin; HTTPS required except HTTP loopback development. Allow it in `xs-security.json` `redirect-uris`; it need not match the client patterns. |
 | `oidc` | `object` | — | `{ issuer, audience, clockToleranceSec?, algorithms?, scopeClaim?, acceptedScopes?, fallbackScopes? }`. Lazy-imports `jose`. `algorithms` defaults to `['RS256','ES256','PS256']`; `scopeClaim` overrides the primary scope-claim name (default `scope`); `acceptedScopes` is the scope-name allowlist for **OIDC-only** deployments with custom scope names (defaults to `xsuaa.scopesSupported`, else the arc-1 set); `fallbackScopes` (default `[]`, fail closed) is the scope set granted when a verified token carries no accepted scope — set `['read']` for legacy read-only fallback. |
 | `allowedOrigins` | `string[]` | — | Exact-match CORS allowlist (with `credentials`) for browser MCP clients. Unset = no CORS. |
 | `required` | `boolean` | `false` | `true` ⇒ throw if no method configured; `false` ⇒ warn + return `undefined` (open). |
@@ -199,7 +200,49 @@ The facade's configuration object. All fields are optional except where noted.
 
 `setupHttpAuth(app, options, logger?)` returns the `/mcp` bearer `RequestHandler`, or `undefined` when no method is configured and `required` is falsy.
 
-### Redirect validation
+### Browser approval
+
+Every authorization request presents an approval page before forwarding to XSUAA,
+including requests from manual clients and previously registered clients. The page
+shows the self-declared client name, actual return address, and requested permissions.
+An existing identity-provider SSO session does not skip this approval.
+
+Approval requires a same-origin form submission bound to a host-only, HttpOnly cookie
+and the exact OAuth request. A separate ten-minute cookie binds the XSUAA callback to
+the browser that approved it. Local authorization codes are signed and bound to the
+client and return address before token exchange; XSUAA continues to enforce PKCE and
+single use. Concurrent tabs and multiple instances work without a shared session store
+when their public URL and signing secret agree. Reverse proxies must preserve Cookie
+and Origin headers and advertise the correct public `appUrl`, including its path prefix.
+
+Existing client IDs remain valid. Sign-ins in flight during the upgrade must restart:
+legacy unbound state and raw upstream authorization codes are rejected. Existing
+refresh tokens are not invalidated by this upgrade. If exposure is suspected, use
+documented XSUAA incident controls and verify token invalidation independently.
+Rotating the DCR signing key alone does not revoke upstream tokens.
+Disabling DCR blocks new registrations, not existing clients or stolen tokens.
+
+### Upgrading deployments
+
+Provider construction rejects an `appUrl` that is not HTTPS, except HTTP on
+`localhost`, `127.0.0.1` or `[::1]`. The callback must share that public origin.
+Configure the public URL explicitly outside Cloud Foundry; a non-loopback HTTP
+bind address is not a public OAuth URL. Existing API-key or OIDC authentication
+does not remove these requirements when XSUAA is enabled alongside it.
+For HTTP development with the SDK router, use `localhost` or `127.0.0.1`: the
+currently tested SDK rejects an IPv6 HTTP issuer. IPv6 client callback URLs remain supported.
+
+Use the same canonical public origin in every client and browser. Alternate routes
+or custom-domain aliases can lose the host-only approval cookie and require sign-in
+to restart at the configured origin. Proxies must preserve `Cookie`, `Set-Cookie`
+and `Origin`, and must not overwrite the approval page's `Referrer-Policy: origin`.
+
+An ordinary sign-in uses two `/authorize` requests: the approval page and its form
+submission. Both count toward the existing authorization endpoint limit. Account for
+shared-IP traffic without disabling that protection. Upgrade every instance before
+resuming sign-ins; a mixture of old and new OAuth implementations is not supported.
+
+## Redirect validation
 
 XSUAA validates the server's callback URL; this package validates client redirects.
 For the pre-registered default client, `redirectUriPatterns` gates added URIs and
