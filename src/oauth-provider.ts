@@ -386,6 +386,8 @@ export interface CreateXsuaaOAuthProviderOptions {
   dcrSigningSecret?: string;
   /** Default-client redirect allowlist; also permits extra DCR custom schemes (see `redirect-uris.ts`). */
   redirectUriPatterns?: readonly string[];
+  /** Optional DCR redirect allowlist; unset keeps the default DCR policy (see `StatelessDcrClientStoreOptions`). */
+  dcrRedirectUriPatterns?: readonly string[];
   /** Initial default-client URIs; each must also match redirectUriPatterns at the callback. */
   defaultRedirectUris?: readonly string[];
   /**
@@ -448,6 +450,7 @@ export function createXsuaaOAuthProvider(
     kdfLabel: options.dcrKdfLabel,
     ttlSeconds: options.dcrTtlSeconds,
     redirectUriPatterns: options.redirectUriPatterns,
+    dcrRedirectUriPatterns: options.dcrRedirectUriPatterns,
     defaultRedirectUris: options.defaultRedirectUris,
     logger,
   });

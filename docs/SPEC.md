@@ -125,6 +125,7 @@ export interface StatelessDcrClientStoreOptions {
   kdfLabel?: string;                  // default 'mcp-dcr/v1'  (domain-separation / revocation knob)
   ttlSeconds?: number;                // default 30d; 0 disables expiry
   redirectUriPatterns?: readonly string[]; // default XSUAA_DEFAULT_REDIRECT_URI_PATTERNS
+  dcrRedirectUriPatterns?: readonly string[]; // default unset; restricts DCR redirect URIs
   defaultRedirectUris?: readonly string[];  // default XSUAA_DEFAULT_REDIRECT_URIS
   now?: () => number;
   logger?: Logger;
@@ -156,8 +157,8 @@ export type DecodeResult =
 export interface CreateXsuaaOAuthProviderOptions {
   clientIdPrefix?: string; dcrKdfLabel?: string; stateKdfLabel?: string;
   dcrTtlSeconds?: number; stateTtlSeconds?: number; dcrSigningSecret?: string;
-  redirectUriPatterns?: readonly string[]; defaultRedirectUris?: readonly string[];
-  callbackUrl?: string; logger?: Logger;
+  redirectUriPatterns?: readonly string[]; dcrRedirectUriPatterns?: readonly string[];
+  defaultRedirectUris?: readonly string[]; callbackUrl?: string; logger?: Logger;
 }
 export function createXsuaaOAuthProvider(
   credentials: XsuaaCredentials, appUrl: string, options?: CreateXsuaaOAuthProviderOptions,
@@ -218,7 +219,8 @@ export interface AuthOptions {
     credentials: XsuaaCredentials; appUrl: string;
     clientIdPrefix?: string; dcrKdfLabel?: string; stateKdfLabel?: string;
     resourceName?: string; scopesSupported?: string[]; requiredScopes?: string[];
-    redirectUriPatterns?: readonly string[]; defaultRedirectUris?: readonly string[];
+    redirectUriPatterns?: readonly string[]; dcrRedirectUriPatterns?: readonly string[];
+    defaultRedirectUris?: readonly string[];
     dcrTtlSeconds?: number; stateTtlSeconds?: number; dcrSigningSecret?: string;
     callbackUrl?: string;   // this server's own /oauth/callback sent to XSUAA (#214); default `${appUrl}/oauth/callback`
   };
@@ -243,8 +245,9 @@ Notes:
 - **Verifier chain order is frozen as `XSUAA → OIDC → api-key`** (matches arc-1). The first accepted result wins; ordinary validation failures try the next independent method, and exhaustion throws `InvalidTokenError`. A validated principal denied by `requireUserToken` throws `XsuaaUserTokenRequiredError` immediately in either JWT slot; its stable own data code is also recognized across package copies and own data `Error.cause` wrappers, without executing getters. Ordinary cause cycles terminate safely. Proxy exception/cause values and malformed core JWT-verifier `AuthInfo` are terminal integration errors (generic 500 under native middleware), never fallback access. Do not overlap XSUAA/OIDC trust with a weaker principal policy. Use the XSUAA verifier directly on user-only XSUAA routes. Native SDK middleware maps principal denial to 403 (`forbidden`, not an `insufficient_scope` challenge) and invalid tokens to 401. No-OAuth-retry behavior is verified only for the tested TypeScript SDK clients, not all MCP clients. Generic scope errors retain the existing chain behavior. calmcp's PR adapts from its current api-key-first order (called out in its PR description).
 - **Verifier diagnostics** are best effort: synchronous debug/info/warn sink throws and returned Promise/thenable rejections are consumed, without awaiting delivery. Optional chain diagnostic projection is guarded and cannot select fallback. Core `AuthInfo` validity is checked separately from optional logging. This is not a new audit-delivery contract and does not supervise unreturned asynchronous work or synchronously blocking consumer code. Calls without data retain one argument and the logger receiver.
 - **CORS + COOP (browser / popup OAuth):** when `allowedOrigins` is set the facade applies a built-in exact-match CORS handler (`credentials:true` + MCP headers; no `cors` dep). The facade sets **no restrictive `Cross-Origin-Opener-Policy`** — popup OAuth (Copilot Studio, claude.ai) breaks under `COOP: same-origin`. Broad hardening (helmet CSP/HSTS) stays consumer-owned; a consumer adding helmet must disable COOP. arc-1 keeps its own `applySecurityMiddleware` via the building-block path.
-- **Redirect validation (normative):** XSUAA's `xs-security.json` allows the server's callback URL. For the pre-registered default client, `redirectUriPatterns` gates added URIs and the callback; keep patterns narrow and ensure `defaultRedirectUris` also match. DCR registration uses `validateRedirectUri`: HTTPS, loopback HTTP and known native schemes are accepted independently of patterns, which can permit extra custom schemes. DCR callbacks require an exact URI from the signed registration. Narrowing patterns does not restrict DCR HTTPS domains or known schemes. Client custom schemes do not belong in `xs-security.json`.
-- **Redirect validation failures:** `validateRedirectUri` throws for disallowed schemes and non-loopback HTTP; unknown schemes require a matching pattern. `matchesRedirectPattern` returns `false` on URL parse failure.
+- **Redirect validation (normative):** XSUAA's `xs-security.json` allows the server's callback URL. For the pre-registered default client, `redirectUriPatterns` gates added URIs and the callback; keep patterns narrow and ensure `defaultRedirectUris` also match. DCR registration uses `validateRedirectUri`: HTTPS, loopback HTTP and known native schemes are accepted independently of patterns, which can permit extra custom schemes. DCR callbacks require an exact URI from the signed registration. Narrowing patterns does not restrict DCR HTTPS domains or known schemes; the optional `dcrRedirectUriPatterns` does: registration rejects non-matching URIs with `invalid_client_metadata` (audit `oauth_client_registration_rejected` with the host only), and `getClient` drops non-matching URIs from earlier signed registrations so the authorize and callback checks see the narrowed list. `[]` rejects every DCR redirect. DCR patterns match case-sensitive paths and queries, with case-insensitive schemes and hosts. Explicit browser approval remains mandatory for every client. The allowlist does not revoke existing access or refresh tokens; configure the same policy on every instance. Client custom schemes do not belong in `xs-security.json`.
+- **Redirect validation failures:** `validateRedirectUri` throws for disallowed schemes and non-loopback HTTP; unknown schemes require a matching pattern. `matchesRedirectPattern` returns `false` on URL parse failure. DCR registration additionally rejects userinfo and fragments and reports every redirect rejection as HTTP 400 `invalid_client_metadata`; direct store callers receive `InvalidClientMetadataError` with a generic message.
+- **DCR allowlist lifecycle:** the list only narrows the base scheme policy and never changes the manual-client policy. Any non-matching URI rejects the entire registration. Existing client IDs are filtered at lookup; widening the policy restores previously excluded URIs. An empty list keeps `/register` mounted; `dcrEnabled: false` removes new registration. Upgrade every instance before enabling the list, then keep the policy identical across instances. Neither setting revokes access or refresh tokens.
 - **`emitAudit` is always null-guarded** (`logger.emitAudit?.(…)`); the package never assumes it exists.
 - **Layer-0 plug-and-play:** `loadXsuaaCredentials()` + `resolveAppUrl()` let a consumer write `setupHttpAuth(app, { xsuaa: { credentials: loadXsuaaCredentials(), appUrl: resolveAppUrl() }, apiKeys }, logger)` with no hand-parsed binding.
 

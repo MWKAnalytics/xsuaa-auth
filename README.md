@@ -187,6 +187,7 @@ The facade's configuration object. All fields are optional except where noted.
 | `xsuaa.scopesSupported` | `string[]` | — | Advertised in OAuth metadata. **Also threaded to the XSUAA + OIDC verifiers as `acceptedScopes`** — set it to your own scope names (e.g. `['Viewer']`) so non-arc-1 scopes aren't filtered out of verified tokens. |
 | `xsuaa.requiredScopes` | `string[]` | — | Enforced via the SDK's `requireBearerAuth({ requiredScopes })`. |
 | `xsuaa.redirectUriPatterns` | `readonly string[]` | `XSUAA_DEFAULT_REDIRECT_URI_PATTERNS` | Redirect allowlist for the pre-registered default client; also permits extra DCR custom schemes. See [Redirect validation](#redirect-validation). |
+| `xsuaa.dcrRedirectUriPatterns` | `readonly string[]` | unset | Optional allowlist for DCR redirect URIs. Registration rejects non-matching URIs; earlier client_ids keep only matching URIs. `[]` rejects every DCR redirect. See [Redirect validation](#redirect-validation). |
 | `xsuaa.defaultRedirectUris` | `readonly string[]` | `XSUAA_DEFAULT_REDIRECT_URIS` | Initial URIs for the default client; each must also match `redirectUriPatterns` at the callback. Narrow both lists together. |
 | `xsuaa.dcrEnabled` | `boolean` | `true` | Set `false` to remove `/register` and its discovery metadata. Existing registrations and manual clients remain usable, with browser approval. |
 | `xsuaa.dcrTtlSeconds` | `number` | `2592000` (30d) | DCR `client_id` lifetime. `0` disables expiry (recommended for clients that don't auto-re-register on `invalid_client`). |
@@ -252,6 +253,35 @@ DCR registration separately accepts HTTPS, loopback HTTP and the known schemes
 `claude:`, `cursor:`, `vscode:` and `vscode-insiders:`; patterns can permit extra
 custom schemes. DCR callbacks must exactly match a URI in the signed registration.
 Narrowing the patterns does **not** restrict DCR HTTPS domains or known schemes.
+To restrict them, set `dcrRedirectUriPatterns` (same glob syntax; schemes and hosts
+are case-insensitive, paths and queries are case-sensitive; write hosts in ASCII
+form). It only narrows the policy above: extra custom schemes still need a
+`redirectUriPatterns` entry, and the pre-registered default client keeps its separate
+policy. If **any** redirect URI fails to match, the whole registration is rejected
+with HTTP 400 `invalid_client_metadata`. Allowlist every URI a client registers;
+for example, `http://127.0.0.1:*/**` does not cover port-less `http://127.0.0.1/`.
+
+Earlier signed client IDs are filtered at lookup. Excluded URIs are ignored while
+the restriction applies; widening the policy restores them. A client without an
+allowed URI cannot start authorization. Update its callbacks to allowed addresses
+and re-register, or adjust the policy deliberately. Rotate the signing secret or
+`dcrKdfLabel` to revoke previously issued client IDs permanently. `[]` rejects every
+DCR redirect but keeps `/register` mounted; `dcrEnabled: false` removes new
+registration. Unset adds no restriction to the default DCR policy.
+
+DCR registration rejects userinfo and fragments even when the allowlist is unset.
+Invalid or disallowed redirects now return HTTP 400 `invalid_client_metadata`
+instead of HTTP 500 `server_error`. Direct `registerClient` callers receive
+`InvalidClientMetadataError` with a generic message; do not match the previous
+error text. Rejection audits include the parsed host and the reason
+`invalid_redirect_uri` or `redirect_uri_not_allowlisted`, without the submitted URL.
+
+Every authorization still requires explicit client approval, including loopback and
+VS Code return addresses. The allowlist restricts where a client may return; it does
+not establish the client's identity or the user's consent. It does not revoke
+already-issued access or refresh tokens. Keep this policy identical on every instance.
+Upgrade every instance to a supporting library version before enabling the policy;
+a mixed deployment can still handle a request on an instance using the old policy.
 Client custom schemes belong in this package's configuration, not `xs-security.json`.
 
 ---
